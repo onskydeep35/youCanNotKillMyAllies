@@ -1,6 +1,7 @@
 import os
-import google.genai as genai
 import asyncio
+import google.genai as genai
+from google.genai import types
 
 
 def create_gemini_client() -> genai.Client:
@@ -23,9 +24,13 @@ def _generate_content_sync(
             {"role": "system", "parts": [{"text": system_prompt}]},
             {"role": "user", "parts": [{"text": user_prompt}]},
         ],
+        config={
+            "response_mime_type": "application/json",
+            "response_json_schema": Recipe.model_json_schema(),
+        },
     )
-    return response.text or ""
 
+    return response.text
 
 async def generate_content_async(
     client: genai.Client,
@@ -33,9 +38,6 @@ async def generate_content_async(
     user_prompt: str,
     model: str = "gemini-3-flash-preview",
 ) -> str:
-    """
-    Run blocking Gemini call in a background thread.
-    """
     return await asyncio.to_thread(
         _generate_content_sync,
         client,

@@ -1,0 +1,29 @@
+{
+  "problem_index": 1,
+  "problem_id": "logic_002",
+  "problem": {
+    "id": "logic_002",
+    "category": "Logic Puzzles & Constraint Satisfaction",
+    "subcategory": "Boxes and Logical Statements",
+    "statement": "There are 3 boxes, exactly one of which has a car. You can keep the car if you pick the correct box.\n\nOn each box there is a statement, exactly one of which is true.\n\nBox 1: \"The car is in this box.\"\nBox 2: \"The car is not in this box.\"\nBox 3: \"The car is not in box 1.\"\n\nWhich box has the car?",
+    "query": "Which box has the car?",
+    "answer": "Box 3",
+    "full_assignment": {
+      "car_location": "Box 2",
+      "true_statement": "Box 3"
+    }
+  },
+  "solver_output": {
+    "problem_id": "logic_002",
+    "llm_model": "gpt-4o",
+    "answer": "Box 2",
+    "reasoning": [
+      "Identify the three statements: Statement 1 (Box 1): 'The car is in this box.', Statement 2 (Box 2): 'The car is not in this box.', Statement 3 (Box 3): 'The car is not in box 1.'",
+      "Identify the constraint: Exactly one of the statements is true, and only one box contains the car.",
+      "Evaluate Case 1: The car is in Box 1. In this case, Statement 1 is true. Statement 2 is also true because the car is in Box 1 and therefore not in Box 2. Statement 3 is false because the car is in Box 1. This results in two true statements (S1 and S2), which violates the constraint.",
+      "Evaluate Case 2: The car is in Box 2. In this case, Statement 1 is false. Statement 2 is false because the car is in Box 2, making the statement 'The car is not in this box' incorrect. Statement 3 is true because the car is indeed not in Box 1. This results in exactly one true statement (S3), which satisfies the constraint.",
+      "Evaluate Case 3: The car is in Box 3. In this case, Statement 1 is false. Statement 2 is true because the car is in Box 3 and therefore not in Box 2. Statement 3 is true because the car is indeed not in Box 1. This results in two true statements (S2 and S3), which violates the constraint.",
+      "Conclusion: Case 2 is the only scenario where exactly one statement is true. Therefore, the car must be in Box 2."
+    ]
+  }
+}

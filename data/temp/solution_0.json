@@ -1,17 +1,33 @@
 {
   "problem_index": 0,
-  "problem_id": "logic_002",
+  "problem_id": "logic_001",
   "problem": {
-    "id": "logic_002",
+    "id": "logic_001",
     "category": "Logic Puzzles & Constraint Satisfaction",
-    "subcategory": "Boxes and Logical Statements",
-    "statement": "There are 3 boxes, exactly one of which has a car. You can keep the car if you pick the correct box.\n\nOn each box there is a statement, exactly one of which is true.\n\nBox 1: \"The car is in this box.\"\nBox 2: \"The car is not in this box.\"\nBox 3: \"The car is not in box 1.\"\n\nWhich box has the car?",
-    "query": "Which box has the car?",
-    "answer": "Box 3",
+    "subcategory": "Truth-tellers and Liars",
+    "statement": "There are two men. One of them is wearing a red shirt, and the other is wearing a blue shirt. The two men are named Andrew and Bob, but we do not know which is Andrew and which is Bob.\n\nThe man in the blue shirt says, \"I am Andrew.\" The man in the red shirt says, \"I am Bob.\"\n\nIf we know that at least one of them lied, then what color shirt is Andrew wearing?",
+    "query": "What color shirt is Andrew wearing?",
+    "answer": "red",
     "full_assignment": {
-      "car_location": "Box 2",
-      "true_statement": "Box 3"
+      "Andrew": {
+        "shirt_color": "red"
+      },
+      "Bob": {
+        "shirt_color": "blue"
+      }
     }
   },
-  "solver_output": "```json\n{\n  \"problem_id\": \"logic_002\",\n  \"llm_model\": \"llama-3.1-70b-instruct\",\n  \"answer\": \"Box 2\",\n  \"reasoning\": [\n    \"Exactly one box contains a car, and exactly one statement on the boxes is true.\",\n    \"Statement 1 (Box 1): 'The car is in this box.' (Car = Box 1)\",\n    \"Statement 2 (Box 2): 'The car is not in this box.' (Car ≠ Box 2)\",\n    \"Statement 3 (Box 3): 'The car is not in box 1.' (Car ≠ Box 1)\",\n    \"Consider the car in Box 1: Statement 1 is true, Statement 2 is true (since the car is in Box 1, it's not in Box 2), and Statement 3 is false (since it is in Box 1). There are 2 true statements (S1, S2). This contradicts the rule that exactly one statement is true.\",\n    \"Consider the car in Box 3: Statement 1 is false (since it's in Box 3), Statement 2 is true (since the car is in Box 3, it's not in Box 2), and Statement 3 is true (since it's not in Box 1). There are 2 true statements (S2, S3). This also contradicts the rule.\",\n    \"Consider the car in Box 2: Statement 1 is false (since it's in Box 2), Statement 2 is false (since the car is in Box 2, the claim that it's not in Box 2 is false), and Statement 3 is true (since the car is not in Box 1). Only one statement (Statement 3) is true.\",\n    \"Since only the assumption that the car is in Box 2 satisfies the condition that exactly one statement is true, the car must be in Box 2.\"\n  ]\n}\n```"
+  "solver_output": {
+    "problem_id": "logic_001",
+    "llm_model": "GPT-4o",
+    "answer": "red",
+    "reasoning": [
+      "Identify the two possible scenarios for the identities of the men: Scenario A (Andrew is in the blue shirt, Bob is in the red shirt) and Scenario B (Andrew is in the red shirt, Bob is in the blue shirt).",
+      "Analyze Scenario A: The man in the blue shirt (Andrew) says 'I am Andrew', which is a true statement. The man in the red shirt (Bob) says 'I am Bob', which is also a true statement.",
+      "Evaluate Scenario A against the constraint: The problem states that 'at least one of them lied'. In Scenario A, both told the truth, so Scenario A is impossible.",
+      "Analyze Scenario B: The man in the blue shirt (Bob) says 'I am Andrew', which is a lie. The man in the red shirt (Andrew) says 'I am Bob', which is also a lie.",
+      "Evaluate Scenario B against the constraint: In Scenario B, both men lied, which satisfies the condition that 'at least one of them lied'.",
+      "Identify Andrew's shirt color in Scenario B: Since Andrew is the man in the red shirt in this scenario, he is wearing red."
+    ]
+  }
 }
