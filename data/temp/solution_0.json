@@ -1,0 +1,17 @@
+{
+  "problem_index": 0,
+  "problem_id": "logic_002",
+  "problem": {
+    "id": "logic_002",
+    "category": "Logic Puzzles & Constraint Satisfaction",
+    "subcategory": "Boxes and Logical Statements",
+    "statement": "There are 3 boxes, exactly one of which has a car. You can keep the car if you pick the correct box.\n\nOn each box there is a statement, exactly one of which is true.\n\nBox 1: \"The car is in this box.\"\nBox 2: \"The car is not in this box.\"\nBox 3: \"The car is not in box 1.\"\n\nWhich box has the car?",
+    "query": "Which box has the car?",
+    "answer": "Box 3",
+    "full_assignment": {
+      "car_location": "Box 2",
+      "true_statement": "Box 3"
+    }
+  },
+  "solver_output": "```json\n{\n  \"problem_id\": \"logic_002\",\n  \"llm_model\": \"llama-3.1-70b-instruct\",\n  \"answer\": \"Box 2\",\n  \"reasoning\": [\n    \"Exactly one box contains a car, and exactly one statement on the boxes is true.\",\n    \"Statement 1 (Box 1): 'The car is in this box.' (Car = Box 1)\",\n    \"Statement 2 (Box 2): 'The car is not in this box.' (Car ≠ Box 2)\",\n    \"Statement 3 (Box 3): 'The car is not in box 1.' (Car ≠ Box 1)\",\n    \"Consider the car in Box 1: Statement 1 is true, Statement 2 is true (since the car is in Box 1, it's not in Box 2), and Statement 3 is false (since it is in Box 1). There are 2 true statements (S1, S2). This contradicts the rule that exactly one statement is true.\",\n    \"Consider the car in Box 3: Statement 1 is false (since it's in Box 3), Statement 2 is true (since the car is in Box 3, it's not in Box 2), and Statement 3 is true (since it's not in Box 1). There are 2 true statements (S2, S3). This also contradicts the rule.\",\n    \"Consider the car in Box 2: Statement 1 is false (since it's in Box 2), Statement 2 is false (since the car is in Box 2, the claim that it's not in Box 2 is false), and Statement 3 is true (since the car is not in Box 1). Only one statement (Statement 3) is true.\",\n    \"Since only the assumption that the car is in Box 2 satisfies the condition that exactly one statement is true, the car must be in Box 2.\"\n  ]\n}\n```"
+}
