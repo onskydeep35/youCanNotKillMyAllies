@@ -3,45 +3,81 @@ import time
 from typing import Type, TypeVar
 
 from llm.models.dataclass.problem import Problem
-from llm.models.pydantic.problem_solution import ProblemSolution
-from llm.prompts import build_solver_user_prompt
-from llm.models.dataclass.agent_config import *
-from llm.models.pydantic.role_assessment import *
-from llm.models.pydantic.problem_solution_judgement import *
+from llm.models.dataclass.agent_config import LLMAgentConfig
 
-T = TypeVar("T")  # for structured LLM outputs
+T = TypeVar("T")
 
 
 class LLMAgent:
     """
-    Executes LLM calls using a fixed LLMAgentConfig.
+    Generic LLM execution engine.
+    Executes schema-constrained LLM calls.
     """
 
     def __init__(self, *, client, config: LLMAgentConfig):
         self.client = client
         self.config = config
 
-    # -------------------------
-    # Internal helper
-    # -------------------------
+
+    async def run_structured_call(
+            self,
+            *,
+            problem: Problem,
+            system_prompt: str,
+            user_prompt: str,
+            output_model: Type[T],
+            method_type: str,
+            timeout_sec: int = 2000,
+            log_interval_sec: int = 5,
+    ) -> T:
+        """
+        Execute a structured LLM call and return a validated output model.
+        """
+
+        try:
+            return await self._run_llm_call(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                output_model=output_model,
+                timeout_sec=timeout_sec,
+                log_interval_sec=log_interval_sec,
+                problem_id=problem.id,
+                method_type=method_type,
+            )
+
+        except asyncio.TimeoutError:
+            print(
+                f"\n[TIMEOUT] "
+                f"agent={self.config.llm_id} "
+                f"method={method_type} "
+                f"problem={problem.id} "
+                f"after {timeout_sec}s\n"
+            )
+            raise
+
     async def _run_llm_call(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        output_model: Type[T],
-        timeout_sec: int,
-        log_interval_sec: int,
-        problem_id: str,
+            self,
+            *,
+            system_prompt: str,
+            user_prompt: str,
+            output_model: Type[T],
+            timeout_sec: int,
+            log_interval_sec: int,
+            problem_id: str,
+            method_type: str,
+            post_call_delay_sec: float = 5,
     ) -> T:
         start_time = time.monotonic()
+        result: T | None = None
 
         async def log_progress():
             try:
                 while True:
                     elapsed = time.monotonic() - start_time
                     print(
-                        f"[thinking] agent={self.config.llm_id} "
+                        f"[thinking] "
+                        f"agent={self.config.llm_id} "
+                        f"method={method_type} "
                         f"problem={problem_id} "
                         f"elapsed={elapsed:.1f}s"
                     )
@@ -67,131 +103,35 @@ class LLMAgent:
             )
 
             print(
-                f"\n[RAW LLM OUTPUT] agent={self.config.llm_id} "
-                f"problem={problem_id}\n{response.text}\n"
+                f"\n[RAW LLM OUTPUT] "
+                f"agent={self.config.llm_id} "
+                f"method={method_type} "
+                f"problem={problem_id}\n"
+                f"{response.text}\n"
             )
 
             return output_model.model_validate_json(response.text)
 
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 asyncio.to_thread(_call_sync),
                 timeout=timeout_sec,
             )
 
         finally:
+            # stop logger
             progress_task.cancel()
 
-    async def assess_roles_for_problem(
-            self,
-            *,
-            problem: Problem,
-            timeout_sec: int = 300,
-            log_interval_sec: int = 5,
-    ) -> RoleAssessment:
-        """
-        Phase 0: LLM self-assesses suitability for each role.
-        """
+            # inject elapsed time if result exists
+            if result is not None:
+                elapsed = time.monotonic() - start_time
+                if hasattr(result, "time_elapsed_sec"):
+                    result.time_elapsed_sec = elapsed
 
-        system_prompt = (
-            "You are part of a multi-agent reasoning system.\n\n"
-            "Your task is to assess your suitability for each role below:\n"
-            "- Solver: independently solves the problem.\n"
-            "- Judge: evaluates and critiques solutions from others.\n\n"
-            "For the given problem, estimate your suitability for EACH role.\n"
-            "Return confidence scores between 0.0 and 1.0.\n"
-            "Do NOT choose a final role."
-        )
+            # unconditional delay
+            if post_call_delay_sec > 0:
+                await asyncio.sleep(post_call_delay_sec)
 
-        user_prompt = (
-            f"Problem:\n{problem.statement}\n\n"
-            "Assess your suitability for each role."
-        )
+        return result
 
-        output = await self._run_llm_call(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            output_model=RoleAssessment,
-            timeout_sec=timeout_sec,
-            log_interval_sec=log_interval_sec,
-            problem_id=problem.id,
-        )
 
-        # 🔒 Deterministically inject agent identity
-        output.llm_id = self.config.llm_id
-        return output
-
-    # -------------------------
-    # Public API: Solver
-    # -------------------------
-    async def solve_problem(
-        self,
-        *,
-        problem: Problem,
-        system_prompt: str,
-        timeout_sec: int = 2000,
-        log_interval_sec: int = 5,
-    ) -> ProblemSolution:
-        """
-        Solve a problem using the given system prompt.
-        """
-        user_prompt = build_solver_user_prompt(problem)
-
-        try:
-            return await self._run_llm_call(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                output_model=ProblemSolution,
-                timeout_sec=timeout_sec,
-                log_interval_sec=log_interval_sec,
-                problem_id=problem.id,
-            )
-
-        except asyncio.TimeoutError:
-            print(
-                f"\n[TIMEOUT] agent={self.config.llm_id} "
-                f"problem={problem.id} after {timeout_sec}s\n"
-            )
-
-            return ProblemSolution(
-                problem_id=problem.id,
-                llm_model=self.config.model,
-                answer="TIMEOUT",
-                reasoning=[
-                    "Solver timed out before producing an answer."
-                ],
-            )
-
-    async def JudgeProblemSolution(
-            self,
-            *,
-            problem: Problem,
-            solution: ProblemSolution
-    ) -> ProblemSolutionJudgement:
-            system_prompt = (
-                "You are a strict peer reviewer evaluating another solver's solution.\n"
-                "Critically evaluate the solution, identify strengths, weaknesses, "
-                "errors, and suggest improvements. "
-                "Return ONLY valid JSON matching the specified schema."
-            )
-
-            user_prompt = f"""
-    PROBLEM:
-    {problem.problem_statement}
-
-    SOLUTION ANSWER:
-    {solution.answer}
-
-    SOLUTION REASONING:
-    {solution.reasoning}
-    """
-
-            response = await self.client.complete(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response_model=ProblemSolutionJudgement,
-                temperature=0.4,  # allow critique diversity
-                top_p=0.9,
-            )
-
-            return response
