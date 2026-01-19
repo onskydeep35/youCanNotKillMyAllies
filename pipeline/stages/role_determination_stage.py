@@ -75,29 +75,49 @@ class RoleDeterminationStage:
         self._assign_roles(ctx, valid_assessments)
 
     def _assign_roles(
-        self,
-        ctx: RunContext,
-        assessments: List[RoleAssessment],
+            self,
+            ctx: RunContext,
+            assessments: List[RoleAssessment],
     ) -> None:
         """
-        Deterministic role assignment for this problem.
+        Deterministic role assignment:
+        - Agent with highest judging score becomes Judge
+        - All others become Solvers
         """
 
-        def solver_score(a: RoleAssessment) -> float:
+        def judging_score(a: RoleAssessment) -> float:
+            solver_confidence = 0.0
+            judge_confidence = 0.0
+
             for rs in a.role_scores:
                 if rs.role == "Solver":
-                    return rs.score
-            return 0.
+                    solver_confidence = rs.score
+                elif rs.role == "Judge":
+                    judge_confidence = rs.score
 
+            return judge_confidence - solver_confidence
+
+        # Sort by judging suitability (highest first)
         sorted_assessments = sorted(
             assessments,
-            key=lambda a: solver_score(a),
+            key=judging_score,
             reverse=True,
         )
 
-        num_solvers = len(sorted_assessments) - 1
+        judge = sorted_assessments[0]
+        solvers = sorted_assessments[1:]
 
-        for idx, assessment in enumerate(sorted_assessments):
-            ctx.final_roles[assessment.llm_id] = (
-                "Solver" if idx < num_solvers else "Judge"
-            )
+        # Assign roles
+        ctx.final_roles[judge.llm_id] = "Judge"
+        for a in solvers:
+            ctx.final_roles[a.llm_id] = "Solver"
+
+        # ---- Console logging ----
+        print("[ROLE ASSIGNMENT]")
+        print("  Judge:")
+        print(f"    - {judge.llm_id}")
+
+        print(f"  Solvers ({len(solvers)}):")
+        for s in solvers:
+            print(f"    - {s.llm_id}")
+

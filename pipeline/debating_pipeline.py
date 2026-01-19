@@ -57,14 +57,14 @@ class DebatingPipeline:
             # -----------------
             LLMAgentConfig(
                 provider="openai",
-                llm_id="gpt41_conservative",
+                llm_id="gpt-4.1",
                 model="gpt-4.1",
                 temperature=0.2,
                 top_p=0.85,
             ),
             LLMAgentConfig(
                 provider="openai",
-                llm_id="gpt5_mini_exploratory",
+                llm_id="gpt-5-mini",
                 model="gpt-5-mini",
                 #temperature=0.7,
                 #top_p=0.95,
@@ -75,14 +75,14 @@ class DebatingPipeline:
             # -----------------
             LLMAgentConfig(
                 provider="gemini",
-                llm_id="gemini_pro_reasoned",
+                llm_id="gemini-3-pro",
                 model="gemini-3-pro-preview",
                 temperature=0.3,
                 top_p=0.9,
             ),
             LLMAgentConfig(
                 provider="gemini",
-                llm_id="gemini_flash_creative",
+                llm_id="gemini-3-flash",
                 model="gemini-3-flash-preview",
                 temperature=0.8,
                 top_p=0.95,
@@ -117,14 +117,14 @@ class DebatingPipeline:
             )
 
             # New context per problem (isolated + debuggable)
-            ctx = RunContext(run_id=f"{idx}-{problem.id}")
+            ctx = RunContext()
 
             # Stage 0: role determination
             await role_stage.run(
                 ctx=ctx,
                 problem=problem,
                 timeout_sec=300,
-                log_interval_sec=5,
+                log_interval_sec=10,
             )
 
             # Stage 1: independent solvers
@@ -132,7 +132,7 @@ class DebatingPipeline:
                 ctx=ctx,
                 problem=problem,
                 timeout_sec=2000,
-                log_interval_sec=5,
+                log_interval_sec=10,
             )
 
             print(

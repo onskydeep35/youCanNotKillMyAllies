@@ -36,18 +36,21 @@ class LLMAgent(ABC):
         )
 
     async def _run_llm_call(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        output_model: type[T],
-        timeout_sec: int,
-        log_interval_sec: int,
-        instance_id: str,
-        method_type: str,
-        post_call_delay_sec: float = 5,
+            self,
+            *,
+            system_prompt: str,
+            user_prompt: str,
+            output_model: type[T],
+            timeout_sec: int,
+            log_interval_sec: int,
+            instance_id: str,
+            method_type: str,
+            post_call_delay_sec: float = 5,
     ) -> T:
-        async def log_progress(start_time: float):
+
+        start_time = time.monotonic()
+
+        async def log_progress():
             try:
                 while True:
                     elapsed = time.monotonic() - start_time
@@ -61,8 +64,7 @@ class LLMAgent(ABC):
             except asyncio.CancelledError:
                 pass
 
-        start = time.perf_counter()
-        progress_task = asyncio.create_task(log_progress(start))
+        progress_task = asyncio.create_task(log_progress())
 
         try:
             result: T = await asyncio.wait_for(
@@ -77,7 +79,7 @@ class LLMAgent(ABC):
                 timeout=timeout_sec,
             )
 
-            elapsed = time.perf_counter() - start
+            elapsed = time.monotonic() - start_time
             if hasattr(result, "time_elapsed_sec"):
                 result.time_elapsed_sec = elapsed
 

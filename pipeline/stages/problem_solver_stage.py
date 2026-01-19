@@ -1,6 +1,7 @@
 import asyncio
-from typing import List
 import json
+from typing import List
+from pathlib import Path
 
 from llm.agents.agent import LLMAgent
 from schemas.dataclass.problem import Problem
@@ -28,6 +29,8 @@ class SolverStage:
         self.agents = agents
         self.writer = writer
         self.semaphore = asyncio.Semaphore(max_concurrency)
+        self.output_dir = Path("data/output")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def run(
         self,
@@ -62,18 +65,21 @@ class SolverStage:
                     log_interval_sec=log_interval_sec,
                 )
 
+                document = {
+                    "run_id": ctx.run_id,
+                    "problem_id": problem.id,
+                    "solver_id": agent.config.llm_id,
+                    "model": agent.config.model,
+                    "temperature": agent.config.temperature,
+                    "top_p": agent.config.top_p,
+                    "category": problem.category,
+                    **solution.model_dump(),
+                    "time_elapsed_sec" : solution.time_elapsed_sec,
+                }
+
                 await self.writer.write(
                     collection=SOLUTIONS,
-                    document={
-                        "run_id": ctx.run_id,
-                        "problem_id": problem.id,
-                        "solver_id": agent.config.llm_id,
-                        "model": agent.config.model,
-                        "temperature": agent.config.temperature,
-                        "top_p": agent.config.top_p,
-                        "category": problem.category,
-                        **solution.model_dump(),
-                    },
+                    document=document,
                 )
                 
                 file_path = (
@@ -83,7 +89,7 @@ class SolverStage:
 
                 file_path.write_text(
                     json.dumps(
-                        solution.model_dump(),
+                        document,
                         indent=2,
                         ensure_ascii=False,
                     ),
