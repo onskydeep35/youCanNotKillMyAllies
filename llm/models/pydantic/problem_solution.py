@@ -6,3 +6,7 @@ class ProblemSolution(BaseModel):
     reasoning: List[str] = Field(
         ..., description="Step-by-step reasoning leading to the answer"
     )
+    time_elapsed_sec: float | None = Field(
+        default=None,
+        exclude=True
+    )

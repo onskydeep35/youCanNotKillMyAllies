@@ -4,7 +4,7 @@ from pathlib import Path
 from pipeline.debating_pipeline import DebatingPipeline
 
 PROBLEMS_PATH = "data/problems.json"
-PROBLEMS_SKIP = 0
+PROBLEMS_SKIP = 3
 PROBLEMS_TAKE = 1
 
 async def main_async():

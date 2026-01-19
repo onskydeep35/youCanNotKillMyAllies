@@ -1,17 +1,23 @@
 import asyncio
 from typing import List
+import json
 
 from llm.agent import LLMAgent
 from llm.models.dataclass.problem import Problem
-from llm.models.dataclass.roles import LLMRolePreference
-from llm.prompts import build_system_prompt
+from llm.models.pydantic.problem_solution import ProblemSolution
+from llm.prompts import (
+    build_solver_system_prompt,
+    build_solver_user_prompt,
+)
 from pipeline.run_context import RunContext
-
-from data.firestore_writer import FirestoreWriter
-from data.firestore_writer import SOLUTIONS
+from data.firestore_writer import FirestoreWriter, SOLUTIONS
 
 
 class SolverStage:
+    """
+    Stage 1: Independent solution generation for a single problem.
+    """
+
     def __init__(
         self,
         agents: List[LLMAgent],
@@ -27,37 +33,35 @@ class SolverStage:
         self,
         *,
         ctx: RunContext,
-        problems: List[Problem],
+        problem: Problem,
         timeout_sec: int,
         log_interval_sec: int,
     ) -> None:
 
         solver_agents = [
-            a for a in self.agents
-            if ctx.final_roles.get(a.config.llm_id) == "Solver"
+            agent for agent in self.agents
+            if ctx.final_roles.get(agent.config.llm_id) == "Solver"
         ]
 
         if not solver_agents:
-            raise RuntimeError("No solver agents assigned")
+            raise RuntimeError(
+                f"No solver agents assigned for problem {problem.id}"
+            )
 
-        solver_role = LLMRolePreference(
-            role_preferences=["Solver"],
-            confidence_by_role={"Solver": 1.0},
-            reasoning="Solve the problem using precise logical reasoning.",
-        )
-
-        system_prompt = build_system_prompt(solver_role.reasoning)
-
-        async def solve(agent: LLMAgent, problem: Problem):
+        async def solve(agent: LLMAgent):
             async with self.semaphore:
-                solution = await agent.solve_problem(
+                solution = await agent.run_structured_call(
                     problem=problem,
-                    system_prompt=system_prompt,
+                    system_prompt=build_solver_system_prompt(
+                        category=problem.category
+                    ),
+                    user_prompt=build_solver_user_prompt(problem),
+                    output_model=ProblemSolution,
+                    method_type="solver",
                     timeout_sec=timeout_sec,
                     log_interval_sec=log_interval_sec,
                 )
 
-                # 🔥 Firestore write happens HERE
                 await self.writer.write(
                     collection=SOLUTIONS,
                     document={
@@ -67,26 +71,44 @@ class SolverStage:
                         "model": agent.config.model,
                         "temperature": agent.config.temperature,
                         "top_p": agent.config.top_p,
+                        "category": problem.category,
                         **solution.model_dump(),
                     },
+                )
+                
+                file_path = (
+                        self.output_dir /
+                        f"{agent.config.llm_id}_{problem.id}.json"
+                )
+
+                file_path.write_text(
+                    json.dumps(
+                        solution.model_dump(),
+                        indent=2,
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
                 )
 
                 return solution
 
-        tasks = [(a, p) for a in solver_agents for p in problems]
         results = await asyncio.gather(
-            *[solve(a, p) for a, p in tasks],
+            *[solve(agent) for agent in solver_agents],
             return_exceptions=True,
         )
 
-        for (agent, problem), result in zip(tasks, results):
+        for agent, result in zip(solver_agents, results):
             if isinstance(result, Exception):
                 print(
-                    f"[FAIL] solver={agent.config.llm_id} "
-                    f"problem={problem.id} error={result}"
+                    f"[SOLVER FAIL] "
+                    f"problem={problem.id} "
+                    f"solver={agent.config.llm_id} "
+                    f"error={result}"
                 )
             else:
                 print(
-                    f"[OK] run={ctx.run_id} "
-                    f"problem={problem.id} solver={agent.config.llm_id}"
+                    f"[SOLVER OK] "
+                    f"run={ctx.run_id} "
+                    f"problem={problem.id} "
+                    f"solver={agent.config.llm_id}"
                 )
