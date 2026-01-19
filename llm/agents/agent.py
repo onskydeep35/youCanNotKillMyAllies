@@ -88,6 +88,21 @@ class LLMAgent(ABC):
             if post_call_delay_sec > 0:
                 await asyncio.sleep(post_call_delay_sec)
 
+    def _build_generation_kwargs(self) -> dict:
+        """
+        Build generic generation kwargs.
+        Providers may ignore unsupported fields.
+        """
+        kwargs = {}
+
+        if self.config.temperature is not None:
+            kwargs["temperature"] = self.config.temperature
+
+        if self.config.top_p is not None:
+            kwargs["top_p"] = self.config.top_p
+
+        return kwargs
+
     @abstractmethod
     def _call_provider(
         self,
