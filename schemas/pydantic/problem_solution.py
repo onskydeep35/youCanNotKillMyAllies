@@ -2,6 +2,18 @@ from typing import List
 from pydantic import BaseModel, Field
 
 class ProblemSolution(BaseModel):
+    prompt_system: str | None = Field(
+        default=None,
+        exclude=True,
+        description="System Prompt for LLM call (excluded from model output)"
+    )
+
+    prompt_user: str | None = Field(
+        default=None,
+        exclude=True,
+        description="User Prompt for LLM call (excluded from model output)"
+    )
+
     solution_id: str | None = Field(
         default=None,
         exclude=True

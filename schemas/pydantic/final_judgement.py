@@ -1,9 +1,14 @@
 from pydantic import BaseModel, Field
+from typing import List, Literal, Optional
 
-class RoleAssessment(BaseModel):
+class FinalJudgement(BaseModel):
     """
-    Self-assessment produced by an LLM indicating its suitability for different roles.
-    Used during Stage 0 and Stage 0.5 for algorithmic role assignment.
+    Output schema for Stage 4: Final Judgment.
+
+    Produced by the Judge after evaluating:
+    - All original solutions
+    - All peer reviews
+    - All refined solutions
     """
 
     prompt_system: str | None = Field(
@@ -30,7 +35,7 @@ class RoleAssessment(BaseModel):
         description="Identifier of the problem solving session run (excluded from model output)"
     )
 
-    assessment_id: str | None = Field(
+    judgement_id: str | None = Field(
         default=None,
         exclude=True,
         description="Internal identifier for this role assessment instance (excluded from model output)"
@@ -42,21 +47,24 @@ class RoleAssessment(BaseModel):
         description="Identifier of the problem for this assessment (excluded from model output)"
     )
 
-    judge_score: float = Field(
+    reasoning: List[str] = Field(
+        ..., description="Step-by-step reasoning leading to the answer"
+    )
+
+    winner_solver: Literal["Solver 1", "Solver 2", "Solver 3"] = Field(
+        ...,
+        description="The most accurate and the best solution author amongst given solver agent contexts for the problem"
+    )
+
+    confidence: float = Field(
         ...,
         ge=0.0,
         le=1.0,
-        description="LLM's score for being a judge for given problem (0–1)"
+        description="Judge confidence in the decision (0–1)"
     )
 
-    solver_score: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="LLM's score for being a solver for given problem (0–1)"
-    )
-
-    reasoning: str = Field(
-        ...,
-        description="Explanation justifying why the LLM believes it is suitable for the given roles"
+    time_elapsed_sec: Optional[float] = Field(
+        default=None,
+        exclude=True,
+        description="Time taken to produce this judgement (in seconds)"
     )

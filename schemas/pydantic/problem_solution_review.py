@@ -66,6 +66,18 @@ class ProblemSolutionReview(BaseModel):
     Complete peer review of a solver's solution produced during Stage 2.
     """
 
+    prompt_system: str | None = Field(
+        default=None,
+        exclude=True,
+        description="System Prompt for LLM call (excluded from model output)"
+    )
+
+    prompt_user: str | None = Field(
+        default=None,
+        exclude=True,
+        description="User Prompt for LLM call (excluded from model output)"
+    )
+
     review_id: Optional[str] = Field(
         default=None,
         exclude=True,
