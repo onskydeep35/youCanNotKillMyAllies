@@ -299,7 +299,7 @@ Your evaluation procedure MUST be:
 Decision rules:
 - The winner MUST be chosen from the refined solutions
 - Prefer correctness and logical soundness over style or verbosity
-- If multiple refined solutions are correct, select the most rigorous, complete, and well-justified
+- If multiple refined solutions are correct, select the one with most rigorous, complete, and well-justified reasoning
 - Do NOT merge ideas from multiple solvers
 - Do NOT invent new arguments
 - Base your judgment STRICTLY on the provided data
