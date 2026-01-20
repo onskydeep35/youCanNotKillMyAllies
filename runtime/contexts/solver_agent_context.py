@@ -64,16 +64,21 @@ class SolverAgentContext:
         Performs LLM role self-assessment for this agent.
         """
 
+        system_prompt = ROLE_DETERMINATION_SYSTEM_PROMPT
+        user_prompt  = build_role_determination_user_prompt(self.problem)
+
         assessment = await self.agent.run_structured_call(
             problem=self.problem,
-            system_prompt=ROLE_DETERMINATION_SYSTEM_PROMPT,
-            user_prompt=build_role_determination_user_prompt(self.problem),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             output_model=RoleAssessment,
-            method_type="role_determination",
+            method_type="role_assessment",
             timeout_sec=timeout_sec,
             log_interval_sec=log_interval_sec,
         )
 
+        assessment.prompt_system = system_prompt
+        assessment.prompt_user = user_prompt
         assessment.llm_id = self.solver_id
         assessment.run_id = self.run_id
         assessment.assessment_id = uuid.uuid4().hex
@@ -92,18 +97,21 @@ class SolverAgentContext:
         log_interval_sec: int,
     ) -> ProblemSolution:
 
+        system_prompt = build_solver_system_prompt(category=self.problem.category)
+        user_prompt  = build_solver_user_prompt(self.problem)
+
         solution = await self.agent.run_structured_call(
             problem=self.problem,
-            system_prompt=build_solver_system_prompt(
-                category=self.problem.category
-            ),
-            user_prompt=build_solver_user_prompt(self.problem),
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             output_model=ProblemSolution,
             method_type="solver",
             timeout_sec=timeout_sec,
             log_interval_sec=log_interval_sec,
         )
 
+        solution.prompt_system = system_prompt
+        solution.prompt_user = user_prompt
         solution.run_id = self.run_id
         solution.solver_llm_model_id = self.solver_id
         solution.solution_id = uuid.uuid4().hex
@@ -123,19 +131,24 @@ class SolverAgentContext:
         log_interval_sec: int,
     ) -> ProblemSolutionReview:
 
-        review = await self.agent.run_structured_call(
-            problem=self.problem,
-            system_prompt=PEER_REVIEW_SYSTEM_PROMPT,
-            user_prompt=build_peer_review_user_prompt(
+        system_prompt = PEER_REVIEW_SYSTEM_PROMPT
+        user_prompt = build_peer_review_user_prompt(
                 problem=self.problem,
                 solution=solution,
-            ),
+            )
+
+        review = await self.agent.run_structured_call(
+            problem=self.problem,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             output_model=ProblemSolutionReview,
             method_type="peer_review",
             timeout_sec=timeout_sec,
             log_interval_sec=log_interval_sec,
         )
 
+        review.prompt_system = system_prompt
+        review.prompt_user = user_prompt
         review.review_id = uuid.uuid4().hex
         review.run_id = self.run_id
         review.problem_id = self.problem.problem_id
@@ -177,20 +190,25 @@ class SolverAgentContext:
         log_interval_sec: int,
     ) -> RefinedProblemSolution:
 
-        refined_solution = await self.agent.run_structured_call(
-            problem=self.problem,
-            system_prompt=REFINE_SOLUTION_SYSTEM_PROMPT,
-            user_prompt=build_solution_refinement_user_prompt(
+        system_prompt = REFINE_SOLUTION_SYSTEM_PROMPT
+        user_prompt = build_solution_refinement_user_prompt(
                 problem=self.problem,
                 initial_solution=self.solution,
                 reviews=self.peer_reviews,
-            ),
+            )
+
+        refined_solution = await self.agent.run_structured_call(
+            problem=self.problem,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             output_model=RefinedProblemSolution,
             method_type="solution_refinement",
             timeout_sec=timeout_sec,
             log_interval_sec=log_interval_sec,
         )
 
+        refined_solution.prompt_system = system_prompt
+        refined_solution.prompt_user = user_prompt
         refined_solution.run_id = self.run_id
         refined_solution.solver_llm_model_id = self.solver_id
         refined_solution.parent_solution_id = self.solution.solution_id

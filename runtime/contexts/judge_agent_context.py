@@ -128,6 +128,7 @@ class JudgeAgentContext:
                     f"Solver {idx} has no refined solution"
                 )
 
+        system_prompt = FINAL_JUDGMENT_SYSTEM_PROMPT
         user_prompt = self.build_final_judgment_user_prompt(
             problem=self.problem,
             solver_contexts=solver_agent_contexts,
@@ -135,7 +136,7 @@ class JudgeAgentContext:
 
         judgement = await self.agent.run_structured_call(
             problem=self.problem,
-            system_prompt=FINAL_JUDGMENT_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_model=FinalJudgement,
             method_type="final_judgment",
@@ -143,7 +144,8 @@ class JudgeAgentContext:
             log_interval_sec=log_interval_sec,
         )
 
-        # --- Populate internal / excluded fields ---
+        judgement.prompt_system = system_prompt
+        judgement.prompt_user = user_prompt
         judgement.llm_id = self.judge_id
         judgement.run_id = self.run_id
         judgement.problem_id = self.problem.problem_id

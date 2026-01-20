@@ -119,6 +119,8 @@ class ProblemSolvingSession:
                 )
 
                 document = {
+                    "prompt_system": assessment.prompt_system,
+                    "prompt_user": assessment.prompt_user,
                     "llm_id": assessment.llm_id,
                     "assessment_id": assessment.assessment_id,
                     "problem_id": assessment.problem_id,
@@ -198,6 +200,8 @@ class ProblemSolvingSession:
                 )
 
                 document = {
+                    "prompt_system": solution.prompt_system,
+                    "prompt_user": solution.prompt_user,
                     "run_id": solution.run_id,
                     "solution_id": solution.solution_id,
                     "problem_id": solution.problem_id,
@@ -264,6 +268,8 @@ class ProblemSolvingSession:
                 reviewee.receive_review(review=review)
 
                 document = {
+                    "prompt_system": review.prompt_system,
+                    "prompt_user": review.prompt_user,
                     "review_id": review.review_id,
                     "run_id": review.run_id,
                     "problem_id": review.problem_id,
@@ -322,20 +328,22 @@ class ProblemSolvingSession:
                     )
                     return
 
-                refined: RefinedProblemSolution = await ctx.refine_solution(
+                refined_solution: RefinedProblemSolution = await ctx.refine_solution(
                     timeout_sec=timeout_sec,
                     log_interval_sec=log_interval_sec,
                 )
 
                 document = {
-                    "run_id": refined.run_id,
-                    "problem_id": refined.problem_id,
-                    "solver_llm_model_id": refined.solver_llm_model_id,
-                    "parent_solution_id": refined.parent_solution_id,
-                    "refined_solution_id": refined.refined_solution_id,
-                    "review_ids": refined.review_ids,
-                    "time_elapsed_sec": refined.time_elapsed_sec,
-                    **refined.model_dump(),
+                    "prompt_system": refined_solution.prompt_system,
+                    "prompt_user": refined_solution.prompt_user,
+                    "run_id": refined_solution.run_id,
+                    "problem_id": refined_solution.problem_id,
+                    "solver_llm_model_id": refined_solution.solver_llm_model_id,
+                    "parent_solution_id": refined_solution.parent_solution_id,
+                    "refined_solution_id": refined_solution.refined_solution_id,
+                    "review_ids": refined_solution.review_ids,
+                    "time_elapsed_sec": refined_solution.time_elapsed_sec,
+                    **refined_solution.model_dump(),
                 }
 
                 print("[REFINED SOLUTION DOCUMENT]", document)
@@ -343,7 +351,7 @@ class ProblemSolvingSession:
                 await self.writer.write(
                     collection=REFINED_SOLUTIONS,
                     document=document,
-                    document_id=refined.refined_solution_id
+                    document_id=refined_solution.refined_solution_id
                 )
 
                 file_path = (
@@ -381,6 +389,8 @@ class ProblemSolvingSession:
         )
 
         document = {
+            "prompt_system": judgement.prompt_system,
+            "prompt_user": judgement.prompt_user,
             "llm_id": judgement.llm_id,
             "run_id": judgement.run_id,
             "judgement_id": judgement.judgement_id,

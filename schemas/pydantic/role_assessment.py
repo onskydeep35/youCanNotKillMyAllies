@@ -6,6 +6,18 @@ class RoleAssessment(BaseModel):
     Used during Stage 0 and Stage 0.5 for algorithmic role assignment.
     """
 
+    prompt_system: str | None = Field(
+        default=None,
+        exclude=True,
+        description="System Prompt for LLM call (excluded from model output)"
+    )
+
+    prompt_user: str | None = Field(
+        default=None,
+        exclude=True,
+        description="User Prompt for LLM call (excluded from model output)"
+    )
+
     llm_id: str | None = Field(
         default=None,
         exclude=True,
