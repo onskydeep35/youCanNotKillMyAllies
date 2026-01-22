@@ -1,6 +1,6 @@
 from schemas.pydantic.problem import *
 from schemas.pydantic.problem_solution_review import *
-
+from schemas.utilities.pydantic_schema_utils import PydanticSchemaUtils
 
 DEFAULT_SOLVER_POLICY = """
     You are a general-purpose problem solver.
@@ -107,36 +107,65 @@ def build_solver_system_prompt(*, category: str) -> str:
     policy = SOLVER_PROMPT_BY_CATEGORY.get(category, DEFAULT_SOLVER_POLICY)
 
     return f"""
-You are an AI agent participating in a multi-agent reasoning system.
+    <system>
+      <role>
+        You are an AI agent participating in a multi-agent reasoning system.
+        Your role is to solve the given problem and return structured JSON output.
+      </role>
 
-ROLE:
-Solver
+      <problem_category>
+        {category}
+      </problem_category>
 
-CATEGORY:
-{category}
+      <role_guidelines>
+        {policy}
+      </role_guidelines>
 
-ROLE GUIDELINES:
-{policy}
+      <input_contract>
+        The full problem statement and all required inputs will be provided to you
+        as a JSON object.
+        You must rely ONLY on the contents of that JSON input.
+        Do NOT assume missing information.
+      </input_contract>
 
-ANSWER STYLE REQUIREMENT:
-- When the problem asks for a specific answer (e.g., a name, option, value, or label),
-  output ONLY the answer itself.
-- Do NOT add explanations, justifications, or restatements in the answer field.
-- The answer should be minimal and test-style.
+      <output_contract>
+        <schema>
+          The final output MUST strictly follow this JSON structure.
+          All fields are REQUIRED unless the schema explicitly allows otherwise.
 
-Example:
-- Query: Out of Green, Brown, Yellow students who is telling the truth?
-  Correct answer format: Green
-  Incorrect answer format: "Brown is telling the truth because ..."
+          {PydanticSchemaUtils.to_descriptive_pretty_json(Problem)}
+        </schema>
 
-GLOBAL RULES (MANDATORY):
-- Follow the Solver role strictly.
-- Do not assume missing information.
-- Do not include extra fields beyond the JSON schema.
-- Do not output markdown or commentary.
-- If uncertain, explicitly state uncertainty in reasoning.
-""".strip()
+        <rules>
+          - Output a single valid JSON object and nothing else.
+          - Do NOT add, rename, or remove fields.
+          - Do NOT include markdown, comments, or extra text.
+          - Use empty arrays instead of null where applicable.
+        </rules>
+      </output_contract>
 
+      <answer_style>
+        When the problem asks for a specific answer (e.g., a name, option, value, or label):
+        - Output ONLY the answer itself in the answer field.
+        - Do NOT add explanations, justifications, or restatements.
+        - The answer must be minimal and test-style.
+
+        <example>
+          Query: Out of Green, Brown, Yellow students who is telling the truth?
+          Correct: Green
+          Incorrect: "Green is telling the truth because ..."
+        </example>
+      </answer_style>
+
+      <global_rules>
+        - Follow the Solver role strictly.
+        - Do not assume missing information.
+        - Do not include extra fields beyond the JSON schema.
+        - Do not output markdown or commentary.
+        - If uncertain, explicitly state uncertainty ONLY in the designated schema fields.
+      </global_rules>
+    </system>
+    """.strip()
 
 def build_solver_user_prompt(problem: Problem) -> str:
     return f"""
