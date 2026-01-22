@@ -1,15 +1,11 @@
 import asyncio
-import json
 from pathlib import Path
-from typing import List, Optional
 from datetime import datetime
 
 from llm.agents.agent import LLMAgent
-from schemas.pydantic.input.problem import Problem
 from schemas.pydantic.output.role_assessment import RoleAssessment
-from schemas.pydantic.output.problem_solution_review import ProblemSolutionReview
-from schemas.pydantic.output.refined_problem_solution import RefinedProblemSolution
 from schemas.pydantic.output.final_judgement import FinalJudgement
+from schemas.utilities import *
 
 from data.persistence.firestore_writer import (
     FirestoreWriter,
@@ -18,12 +14,13 @@ from data.persistence.firestore_writer import (
     REFINED_SOLUTIONS,
     ROLE_ASSESSMENTS,
     FINAL_JUDGEMENTS,
-    RUNS
+    RUNS,
 )
 
 from runtime.contexts.solver_agent_context import SolverAgentContext
 from runtime.contexts.judge_agent_context import JudgeAgentContext
 from llm.prompts.prompts import *
+
 
 class ProblemSolvingSession:
     """
@@ -97,9 +94,7 @@ class ProblemSolvingSession:
         }
 
         await self.writer.write(
-            collection=RUNS,
-            document=document,
-            document_id=self.run_id
+            collection=RUNS, document=document, document_id=self.run_id
         )
 
     # -------------------------
@@ -134,15 +129,7 @@ class ProblemSolvingSession:
                     log_interval_sec=log_interval_sec,
                 )
 
-                document = {
-                    "prompt_system": assessment.prompt_system,
-                    "prompt_user": assessment.prompt_user,
-                    "llm_id": assessment.llm_id,
-                    "assessment_id": assessment.assessment_id,
-                    "problem_id": assessment.problem_id,
-                    "run_id": assessment.run_id,
-                    **assessment.model_dump(),
-                }
+                document = PydanticSchemaUtils.build_full_document(assessment)
 
                 await self.writer.write(
                     collection=ROLE_ASSESSMENTS,
@@ -151,8 +138,7 @@ class ProblemSolvingSession:
                 )
 
                 file_path = (
-                    assessment_dir /
-                    f"{assessment.llm_id}_{assessment.problem_id}.json"
+                    assessment_dir / f"{assessment.llm_id}_{assessment.problem_id}.json"
                 )
 
                 file_path.write_text(
@@ -215,31 +201,19 @@ class ProblemSolvingSession:
                     log_interval_sec=log_interval_sec,
                 )
 
-                document = {
-                    "prompt_system": solution.prompt_system,
-                    "prompt_user": solution.prompt_user,
-                    "run_id": solution.run_id,
-                    "solution_id": solution.solution_id,
-                    "problem_id": solution.problem_id,
-                    "solver_llm_model_id": solution.solver_llm_model_id,
-                    "time_elapsed_sec": solution.time_elapsed_sec,
-                    **solution.model_dump(),
-                }
-
-                print("[SOLUTION DOCUMENT]", document)
+                document = PydanticSchemaUtils.build_full_document(solution)
 
                 await self.writer.write(
                     collection=SOLUTIONS,
                     document=document,
-                    document_id=solution.solution_id
+                    document_id=solution.solution_id,
                 )
 
                 solutions_dir = self.output_dir / "solutions"
                 solutions_dir.mkdir(parents=True, exist_ok=True)
 
                 file_path = (
-                        solutions_dir /
-                        f"{ctx.solver_id}_{self.problem.problem_id}.json"
+                    solutions_dir / f"{ctx.solver_id}_{self.problem.problem_id}.json"
                 )
 
                 file_path.write_text(
@@ -247,9 +221,7 @@ class ProblemSolvingSession:
                     encoding="utf-8",
                 )
 
-        await asyncio.gather(
-            *[solve(ctx) for ctx in self.solver_contexts]
-        )
+        await asyncio.gather(*[solve(ctx) for ctx in self.solver_contexts])
 
     # -------------------------
     # Stage 2: Peer review
@@ -283,30 +255,20 @@ class ProblemSolvingSession:
 
                 reviewee.receive_review(review=review)
 
-                document = {
-                    "prompt_system": review.prompt_system,
-                    "prompt_user": review.prompt_user,
-                    "review_id": review.review_id,
-                    "run_id": review.run_id,
-                    "problem_id": review.problem_id,
-                    "solution_id": review.solution_id,
-                    "reviewer_id": review.reviewer_id,
-                    "reviewee_id": review.reviewee_id,
-                    **review.model_dump(),
-                }
+                document = PydanticSchemaUtils.build_full_document(review)
 
                 await self.writer.write(
                     collection=SOLUTION_REVIEWS,
                     document=document,
-                    document_id=review.review_id
+                    document_id=review.review_id,
                 )
 
                 solutions_dir = self.output_dir / "reviews"
                 solutions_dir.mkdir(parents=True, exist_ok=True)
 
                 file_path = (
-                        solutions_dir /
-                        f"{review.reviewer_id}_{review.reviewee_id}_{self.problem.problem_id}.json"
+                    solutions_dir
+                    / f"{review.reviewer_id}_{review.reviewee_id}_{self.problem.problem_id}.json"
                 )
 
                 file_path.write_text(
@@ -326,10 +288,10 @@ class ProblemSolvingSession:
         print("[PEER REVIEW COMPLETE]")
 
     async def _run_refinements(
-            self,
-            *,
-            timeout_sec: int,
-            log_interval_sec: int,
+        self,
+        *,
+        timeout_sec: int,
+        log_interval_sec: int,
     ) -> None:
 
         print("[REFINEMENT START]")
@@ -350,30 +312,18 @@ class ProblemSolvingSession:
                     log_interval_sec=log_interval_sec,
                 )
 
-                document = {
-                    "prompt_system": refined_solution.prompt_system,
-                    "prompt_user": refined_solution.prompt_user,
-                    "run_id": refined_solution.run_id,
-                    "problem_id": refined_solution.problem_id,
-                    "solver_llm_model_id": refined_solution.solver_llm_model_id,
-                    "parent_solution_id": refined_solution.parent_solution_id,
-                    "refined_solution_id": refined_solution.refined_solution_id,
-                    "review_ids": refined_solution.review_ids,
-                    "time_elapsed_sec": refined_solution.time_elapsed_sec,
-                    **refined_solution.model_dump(),
-                }
+                document = PydanticSchemaUtils.build_full_document(refined_solution)
 
                 print("[REFINED SOLUTION DOCUMENT]", document)
 
                 await self.writer.write(
                     collection=REFINED_SOLUTIONS,
                     document=document,
-                    document_id=refined_solution.refined_solution_id
+                    document_id=refined_solution.refined_solution_id,
                 )
 
                 file_path = (
-                        refined_dir /
-                        f"{ctx.solver_id}_{ctx.problem.problem_id}.json"
+                    refined_dir / f"{ctx.solver_id}_{ctx.problem.problem_id}.json"
                 )
 
                 file_path.write_text(
@@ -381,17 +331,15 @@ class ProblemSolvingSession:
                     encoding="utf-8",
                 )
 
-        await asyncio.gather(
-            *[refine(ctx) for ctx in self.solver_contexts]
-        )
+        await asyncio.gather(*[refine(ctx) for ctx in self.solver_contexts])
 
         print("[REFINEMENT COMPLETE]")
 
     async def _run_final_judgement(
-            self,
-            *,
-            timeout_sec: int,
-            log_interval_sec: int,
+        self,
+        *,
+        timeout_sec: int,
+        log_interval_sec: int,
     ) -> None:
 
         print("[FINAL JUDGMENT START]")
@@ -405,16 +353,7 @@ class ProblemSolvingSession:
             log_interval_sec=log_interval_sec,
         )
 
-        document = {
-            "prompt_system": judgement.prompt_system,
-            "prompt_user": judgement.prompt_user,
-            "llm_id": judgement.llm_id,
-            "run_id": judgement.run_id,
-            "judgement_id": judgement.judgement_id,
-            "problem_id": judgement.problem_id,
-            "time_elapsed_sec": judgement.time_elapsed_sec,
-            **judgement.model_dump(),
-        }
+        document = PydanticSchemaUtils.build_full_document(judgement)
 
         await self.writer.write(
             collection=FINAL_JUDGEMENTS,
@@ -426,8 +365,8 @@ class ProblemSolvingSession:
         judgement_dir.mkdir(parents=True, exist_ok=True)
 
         file_path = (
-                judgement_dir /
-                f"{self.judge_context.judge_id}_{self.problem.problem_id}.json"
+            judgement_dir
+            / f"{self.judge_context.judge_id}_{self.problem.problem_id}.json"
         )
 
         file_path.write_text(
