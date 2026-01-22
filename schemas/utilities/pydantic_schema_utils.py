@@ -113,8 +113,7 @@ class PydanticSchemaUtils:
         # ---------- Optional / Union ----------
         if "anyOf" in schema:
             return " | ".join(
-                PydanticSchemaUtils._schema_type_repr(s, defs)
-                for s in schema["anyOf"]
+                PydanticSchemaUtils._schema_type_repr(s, defs) for s in schema["anyOf"]
             )
 
         t = schema.get("type")
@@ -148,3 +147,28 @@ class PydanticSchemaUtils:
             excluded.update(model_exclude)
 
         return excluded
+
+    @staticmethod
+    def build_full_document(model: BaseModel) -> Dict[str, Any]:
+        """
+        Builds a full document from a Pydantic model by:
+        1) dumping normally (respects exclude=True)
+        2) collecting excluded fields from schema
+        3) re-injecting excluded field values from the instance
+        """
+
+        # 1. Normal dump (excluded fields are missing here)
+        document = model.model_dump(
+            mode="json",
+            exclude_none=False,
+        )
+
+        # 2. Find which fields were excluded by schema
+        excluded_fields = PydanticSchemaUtils._collect_excluded_fields(model.__class__)
+
+        # 3. Re-inject excluded fields from the instance
+        for field_name in excluded_fields:
+            if hasattr(model, field_name):
+                document[field_name] = getattr(model, field_name)
+
+        return document
