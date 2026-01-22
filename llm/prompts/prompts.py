@@ -1,6 +1,12 @@
 from schemas.pydantic.input.problem import *
+from schemas.pydantic.input.peer_review_input import PeerReviewInput
+from schemas.pydantic.input.solution_refinement_input import SolutionRefinementInput
+from schemas.pydantic.input.final_judgement_input import *
+from schemas.pydantic.output.problem_solution import *
 from schemas.pydantic.output.problem_solution_review import *
 from schemas.utilities.pydantic_schema_utils import PydanticSchemaUtils
+
+import json
 
 DEFAULT_SOLVER_POLICY = """
     You are a general-purpose problem solver.
@@ -25,7 +31,6 @@ SOLVER_PROMPT_BY_CATEGORY: dict[str, str] = {
         - Intuitive leaps without justification
         - Skipping algebraic steps
         """,
-
     "Physics & Scientific Reasoning": """
         You are a Solver specialized in physics and scientific reasoning.
 
@@ -39,7 +44,6 @@ SOLVER_PROMPT_BY_CATEGORY: dict[str, str] = {
         - Plug-and-chug without explanation
         - Ignoring limiting cases
         """,
-
     "Logic & Constraint Satisfaction": """
         You are a Solver specialized in logic and constraint satisfaction.
 
@@ -53,7 +57,6 @@ SOLVER_PROMPT_BY_CATEGORY: dict[str, str] = {
         - Probabilistic language
         - Unverified conclusions
         """,
-
     "Strategic Game Theory": """
         You are a Solver specialized in strategic and game-theoretic reasoning.
 
@@ -69,38 +72,90 @@ SOLVER_PROMPT_BY_CATEGORY: dict[str, str] = {
         """,
 }
 
+ROLE_DETERMINATION_SYSTEM_PROMPT = f"""
+<system>
+  <role>
+    You are an AI agent participating in a multi-agent problem solving system.
+    Your task is to assess role suitability for the given problem.
+  </role>
 
-ROLE_DETERMINATION_SYSTEM_PROMPT = """
-You are an AI agent participating in a multi-agent collaborative reasoning system.
+  <task_definition>
+    Determine suitability for each role based solely on the
+    characteristics of the provided problem.
 
-TASK:
-Assess suitability for different roles based on the PROBLEM CHARACTERISTICS,
-not personal preference.
+    <available_roles>
+        - Solver: derives a solution from scratch
+        - Judge: evaluates, compares, and critiques multiple solutions
+    </available_roles>
+  </task_definition>
 
-ROLES:
-- Solver: derives a solution from scratch.
-- Judge: evaluates, critiques, and compares multiple solutions.
+  <schema_overview>
+    The ROOT and AUTHORITATIVE input schema for this task is:
+    <root_schema>Problem</root_schema>
 
-GUIDELINES:
-- Use the problem category as a strong prior.
-- Think in terms of task difficulty, verification needs, and reasoning style.
-- Do NOT choose a final role.
-- Do NOT include explanations beyond what is required by the schema.
-- Output must strictly follow the provided JSON schema.
-"""
+    This task uses a single input schema with no external references.
+  </schema_overview>
+
+  <schema_definitions>
+    <Problem>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(Problem)}
+    </Problem>
+  </schema_definitions>
+
+  <input_contract>
+    The user prompt will provide the full problem as a single JSON object.
+
+    This JSON object follows a Pydantic-defined schema and is the
+    authoritative input for this task.
+
+    Interpretation rules:
+    - Problem is the ONLY root-level input object
+    - All required information is contained within this object
+
+    You must:
+    - Rely ONLY on the contents of the provided JSON input
+    - Use the problem category and structure as primary signals
+    - Do NOT attempt to solve the problem
+    - Do NOT use external knowledge or assumptions
+  </input_contract>
+
+  <output_contract>
+    The output schema is enforced externally via a Pydantic JSON schema.
+
+    You must:
+    - Output a single valid JSON object
+    - Conform exactly to the enforced output schema
+    - Do NOT include markdown, comments, or extra text
+    - Do NOT choose or assign a final role
+  </output_contract>
+
+  <global_rules>
+    - Assess roles based on problem characteristics only
+  </global_rules>
+</system>
+""".strip()
 
 
 def build_role_determination_user_prompt(problem: Problem) -> str:
+    """
+    Build the user prompt by providing the authoritative
+    Problem input as JSON.
+    """
+
+    problem_json = problem.model_dump(mode="json")
+
     return f"""
-Analyze the following problem and estimate how suitable each role is.
+<user_input>
+  The following JSON object is the authoritative input for this task.
+  It conforms to the predefined Problem schema.
 
-Problem Category: {problem.category}
+  You must rely ONLY on this JSON to determine the role scores for given problem
 
-Problem Statement:
-{problem.statement}
-
-Return normalized confidence scores between 0.0 and 1.0 for each role.
-"""
+  <problem>  
+  {json.dumps(problem_json, indent=2, ensure_ascii=False)}
+  </problem>
+</user_input>
+""".strip()
 
 
 def build_solver_system_prompt(*, category: str) -> str:
@@ -109,7 +164,7 @@ def build_solver_system_prompt(*, category: str) -> str:
     return f"""
 <system>
   <role>
-    You are an AI agent participating in a multi-agent reasoning system.
+    You are an AI agent participating in a multi-agent problem solving system.
     Your role is to solve the given problem and return structured JSON output.
   </role>
 
@@ -121,17 +176,28 @@ def build_solver_system_prompt(*, category: str) -> str:
     {policy}
   </role_guidelines>
 
-  <input_contract>
-    The user prompt will provide the full problem and all required inputs
-    as a single JSON object.
-    
-    This JSON object follows a Pydantic-defined schema and represents
-    the authoritative input for this task.
-    
-    <schema_description>
+  <schema_overview>
+    The ROOT and AUTHORITATIVE input schema for this task is:
+    <root_schema>Problem</root_schema>
+
+    This task uses a single input schema with no external references.
+  </schema_overview>
+
+  <schema_definitions>
+    <Problem>
       {PydanticSchemaUtils.to_descriptive_pretty_json(Problem)}
-    </schema_description>
-    
+    </Problem>
+  </schema_definitions>
+
+  <input_contract>
+    The user prompt will provide a single JSON object
+    that MUST conform to the Problem schema.
+
+    Interpretation rules:
+    - Problem is the ONLY root-level input object
+    - All required information is contained within this object
+    - No additional inputs or referenced schemas exist
+
     You must:
     - Rely ONLY on the contents of the provided JSON input
     - Interpret all fields according to their meaning in the schema
@@ -148,29 +214,34 @@ def build_solver_system_prompt(*, category: str) -> str:
     - Conform exactly to the enforced output schema
     - Do NOT add, rename, or remove fields
     - Do NOT include markdown, comments, or extra text
+
+    <answer_style>
+      When the problem asks for a specific answer (e.g., a name, option, value, or label):
+      - Output ONLY the answer itself in the answer field
+      - Do NOT add explanations, justifications, or restatements
+      - The answer must be minimal and test-style
+
+      <example>
+        Query: Out of Green, Brown, Yellow students who is telling the truth?
+        Correct: Green
+        Incorrect: "Green is telling the truth because ..."
+      </example>
+    </answer_style>
   </output_contract>
 
-  <answer_style>
-    When the problem asks for a specific answer (e.g., a name, option, value, or label):
-    - Output ONLY the answer itself in the answer field
-    - Do NOT add explanations, justifications, or restatements
-    - The answer must be minimal and test-style
-
-    <example>
-      Query: Out of Green, Brown, Yellow students who is telling the truth?
-      Correct: Green
-      Incorrect: "Green is telling the truth because ..."
-    </example>
-  </answer_style>
-
   <global_rules>
-    - Follow the Solver role strictly
-    - Do not assume missing information
-    - Do not output markdown or commentary
-    - If uncertain, explicitly state uncertainty ONLY in the designated schema fields
+    - Derive the final answer strictly and exclusively from your own internal reasoning
+      applied to the provided JSON input
+    - Do NOT use external knowledge or real-world assumptions
+      not explicitly present in the input
+    - If your reasoning conflicts with any external knowledge you may possess,
+      follow the reasoning and the input
+    - The final answer MUST be logically supported by the reasoning you produce;
+      do not output an answer not reached through that reasoning
   </global_rules>
 </system>
 """.strip()
+
 
 def build_solver_user_prompt(problem: Problem) -> str:
     """
@@ -187,88 +258,204 @@ def build_solver_user_prompt(problem: Problem) -> str:
 
   You must rely ONLY on this JSON to solve the problem.
    
-  <problem_json>  
+  <problem>  
   {json.dumps(problem_json, indent=2, ensure_ascii=False)}
-  </problem_json>
+  </problem>
 </user_input>
 """.strip()
 
 
-PEER_REVIEW_SYSTEM_PROMPT = """
-You are an expert peer reviewer evaluating another AI's solution.
+PEER_REVIEW_SYSTEM_PROMPT = f"""
+<system>
+  <role>
+    You are an AI agent participating in a multi-agent problem solving system.
+    Your role is to perform peer review of another agent's solution.
+  </role>
 
-Your task is to critically evaluate the solution for correctness, logical validity,
-completeness, and clarity.
+  <task_definition>
+    Critically evaluate the provided solution for correctness,
+    logical validity, completeness, and clarity.
+  </task_definition>
 
-Rules:
-- Do NOT restate the solution.
-- Do NOT re-solve the problem from scratch.
-- Focus on identifying flaws, missing cases, unjustified steps, or inconsistencies.
-- Be precise and structured.
-- If the solution is correct, explicitly state why no critical errors exist.
-- Output ONLY valid JSON matching the given schema.
+  <schema_overview>
+    The ROOT and AUTHORITATIVE input schema for this task is:
+    <root_schema>ReviewInput</root_schema>
+
+    ReviewInput may reference other schemas by type name.
+    All referenced schemas are defined below.
+  </schema_overview>
+
+  <schema_definitions>
+    <Problem>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(Problem)}
+    </Problem>
+
+    <ProblemSolution>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(ProblemSolution)}
+    </ProblemSolution>
+
+    <ReviewInput>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(PeerReviewInput)}
+    </ReviewInput>
+  </schema_definitions>
+
+  <input_contract>
+    The user prompt will provide a single JSON object
+    that MUST conform to the ReviewInput schema.
+
+    Interpretation rules:
+    - ReviewInput is the ONLY root-level input object
+    - Fields inside ReviewInput may reference other schemas
+      (e.g., Problem, ProblemSolution)
+    - Referenced schemas define structure and meaning only;
+      they do NOT represent separate inputs
+
+    You must:
+    - Rely ONLY on the contents of the provided JSON input
+    - Interpret all fields using their referenced schema definitions
+    - Treat the reviewed solution as fixed input
+    - Do NOT introduce new assumptions or external knowledge
+  </input_contract>
+
+  <output_contract>
+    The output schema is enforced externally via a Pydantic JSON schema.
+
+    You must:
+    - Output a single valid JSON object
+    - Conform exactly to the enforced output schema
+    - Do NOT add, rename, or remove fields
+    - Do NOT include markdown, comments, or extra text
+  </output_contract>
+
+  <global_rules>
+    - Do NOT restate or summarize the solution
+    - Do NOT re-solve the problem from scratch
+    - Focus on identifying:
+        * logical errors
+        * unjustified steps
+        * missing cases
+        * internal inconsistencies
+    - Base all evaluations strictly on ReviewInput
+      and its referenced schemas
+    - Be precise, concrete, and structured
+    - If no critical issues exist, explicitly state why the solution is correct
+      within the allowed schema fields
+  </global_rules>
+</system>
 """.strip()
-
-import json
-from schemas.pydantic.output.problem_solution import *
 
 
 def build_peer_review_user_prompt(
-    *,
-    problem: Problem,
-    solution: ProblemSolution
+    *, problem: Problem, solution: ProblemSolution
 ) -> str:
     """
     Build peer-review user prompt for one reviewer → one reviewee.
     JSON-based, data-only prompt with indexed reasoning steps.
     """
 
-    payload = {
-        "problem": {
-            "statement": problem.statement
-        },
-        "solution": {
-            "answer": solution.answer,
-            "reasoning_steps": [
-                {
-                    "step": idx + 1,
-                    "text": step
-                }
-                for idx, step in enumerate(solution.reasoning)
-            ]
-        }
-    }
+    review_input = PeerReviewInput(problem=problem, solution=solution)
+    review_input_json = review_input.model_dump(mode="json")
 
-    user_prompt = (
-        "Below is the data required to review the solution.\n"
-        "Use ALL information provided.\n\n"
-        "INPUT_DATA:\n"
-        f"{json.dumps(payload, indent=2)}"
-    )
+    return f"""
+    <user_input>
+      The following JSON object is the authoritative input for this task.
+      It conforms to the predefined Problem schema.
 
-    print(f"[REVIEW USER PROMPT]: {user_prompt}")
-    return user_prompt
+      You must rely ONLY on this JSON to review the problem solution
+
+      <ReviewInput>  
+        {json.dumps(review_input_json, indent=2, ensure_ascii=False)}
+      <ReviewInput>
+    </user_input>
+    """.strip()
 
 
-REFINE_SOLUTION_SYSTEM_PROMPT = """
-You are a problem solution refiner.
+REFINE_SOLUTION_SYSTEM_PROMPT = f"""
+<system>
+  <role>
+    You are an AI agent participating in a multi-agent problem solving system.
+    Your role is to refine a previously generated solution based on peer reviews.
+  </role>
 
-You previously produced a solution to a problem.
-You are now given peer reviews written by other agents.
+  <task_definition>
+    Refine the provided solution by explicitly addressing all peer review feedback.
 
-Your task:
-- Explicitly address every critique found in the peer reviews
-- Decide whether each critique is valid or invalid
-- Incorporate all valid critiques into a revised solution
-- Defend your original reasoning when critiques are incorrect
-- Produce a refined final solution and final answer
+    You must:
+    - Evaluate each critique as valid or invalid
+    - Incorporate all valid critiques into a revised solution
+    - Defend the original reasoning where critiques are incorrect
+    - Produce a refined solution and refined final answer
+  </task_definition>
 
-Rules:
-- Do NOT ignore any critique
-- Do NOT introduce new assumptions unless required by accepted critiques
-- Be precise and concise
-- Base all revisions strictly on the provided problem, solution, and reviews
-"""
+  <schema_overview>
+    The ROOT and AUTHORITATIVE input schema for this task is:
+    <root_schema>SolutionRefinementInput</root_schema>
+
+    SolutionRefinementInput may reference other schemas by type name.
+    All referenced schemas are defined below.
+  </schema_overview>
+
+  <schema_definitions>
+    <Problem>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(Problem)}
+    </Problem>
+
+    <ProblemSolution>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(ProblemSolution)}
+    </ProblemSolution>
+
+    <ProblemSolutionReview>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(ProblemSolutionReview)}
+    </ProblemSolutionReview>
+
+    <SolutionRefinementInput>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(SolutionRefinementInput)}
+    </SolutionRefinementInput>
+  </schema_definitions>
+
+  <input_contract>
+    The user prompt will provide a single JSON object
+    that MUST conform to the SolutionRefinementInput schema.
+
+    Interpretation rules:
+    - SolutionRefinementInput is the ONLY root-level input object
+    - Fields inside SolutionRefinementInput may reference other schemas
+      (e.g., Problem, ProblemSolution, ProblemSolutionReview)
+    - Referenced schemas define structure and meaning only;
+      they do NOT represent separate inputs
+
+    You must:
+    - Rely ONLY on the contents of the provided JSON input
+    - Interpret all fields using their referenced schema definitions
+    - Treat the original solution and reviews as fixed input
+    - Do NOT introduce new assumptions unless required
+      by accepting a peer critique
+  </input_contract>
+
+  <output_contract>
+    The output schema is enforced externally via a Pydantic JSON schema.
+
+    You must:
+    - Output a single valid JSON object
+    - Conform exactly to the enforced output schema
+    - Do NOT add, rename, or remove fields
+    - Do NOT include markdown, comments, or extra text
+  </output_contract>
+
+  <global_rules>
+    - Do NOT ignore any peer review critique
+    - Do NOT re-solve the problem from scratch
+    - Address each critique explicitly, indicating acceptance or rejection
+    - Base all refinements strictly on:
+        * the provided problem
+        * the original solution
+        * the peer reviews
+    - Be precise, concise, and structured
+    - The refined answer MUST be logically supported
+      by the refined reasoning
+  </global_rules>
+</system>
+""".strip()
 
 
 def build_solution_refinement_user_prompt(
@@ -278,78 +465,154 @@ def build_solution_refinement_user_prompt(
     reviews: list[ProblemSolutionReview],
 ) -> str:
     """
-    Builds the user prompt for Stage 3 solution refinement.
-    Input is intentionally JSON to preserve full structure.
+    Build peer-review user prompt for one reviewer → one reviewee.
+    JSON-based, data-only prompt with indexed reasoning steps.
     """
 
-    problem_payload = problem.model_dump()
-
-    initial_solution_payload = initial_solution.model_dump()
-
-    reviews_payload = [
-        review.model_dump()
-        for review in reviews
-    ]
-
-    payload = {
-        "problem": problem_payload,
-        "previous_solution": initial_solution_payload,
-        "peer_reviews": reviews_payload,
-    }
-
-    user_prompt = (
-        "Below is the data required to refine the solution.\n"
-        "Use ALL information provided.\n\n"
-        "INPUT_DATA:\n"
-        f"{json.dumps(payload, indent=2)}"
+    solution_refinement_input = SolutionRefinementInput(
+        problem=problem, solution=initial_solution, reviews=reviews
     )
+    solution_refinement_input_json = solution_refinement_input.model_dump(mode="json")
 
-    print(f"[REFINEMENT USER PROMPT]: {user_prompt}")
+    return f"""
+    <user_input>
+      The following JSON object is the authoritative input for this task.
+      It conforms to the predefined SolutionRefinementInput schema.
 
-    return user_prompt
+      You must rely ONLY on this JSON to refine the problem solution.
 
-
-FINAL_JUDGMENT_SYSTEM_PROMPT = """
-You are the FINAL JUDGE in a structured multi-agent problem-solving debate.
-
-Your role is strictly evaluative and comparative.
-You do NOT solve the problem yourself.
-You do NOT revise solutions.
-You do NOT introduce new facts, assumptions, or reasoning.
-
-You will receive ALL input as structured JSON payloads, grouped by entity.
-Each solver is presented independently and must be evaluated independently.
-
-You are given:
-- The original problem
-- Three solver sections (Solver 1, Solver 2, Solver 3)
-For EACH solver, you will receive:
-- The original solution
-- All peer reviews written about that solution
-- The refined solution produced after incorporating peer feedback
-
-Your evaluation procedure MUST be:
-1. For each solver:
-   - Assess the correctness of the original solution
-   - Examine peer reviews and identify valid vs invalid critiques
-   - Evaluate how well the refined solution addressed valid critiques
-2. Judge the final quality of EACH refined solution independently
-3. Compare ONLY the refined solutions to each other
-4. Select EXACTLY ONE winner based on the refined solutions
-
-Decision rules:
-- The winner MUST be chosen from the refined solutions
-- Prefer correctness and logical soundness over style or verbosity
-- If multiple refined solutions are correct, select the one with most rigorous, complete, and well-justified reasoning
-- Do NOT merge ideas from multiple solvers
-- Do NOT invent new arguments
-- Base your judgment STRICTLY on the provided data
-
-Output requirements:
-- Choose exactly ONE winner: "Solver 1", "Solver 2", or "Solver 3"
-- Provide step-by-step reasoning justifying the decision
-- Assign a confidence score between 0.0 and 1.0
-"""
+      <SolutionRefinementInput>  
+        {json.dumps(solution_refinement_input_json, indent=2, ensure_ascii=False)}
+      <SolutionRefinementInput>
+    </user_input>
+    """.strip()
 
 
+FINAL_JUDGMENT_SYSTEM_PROMPT = f"""
+<system>
+  <role>
+    You are an AI agent participating in a multi-agent problem solving system.
+    Your role is the FINAL JUDGE responsible for selecting the best refined solution.
+  </role>
 
+  <task_definition>
+    Evaluate and compare refined solutions produced by multiple solvers and
+    select exactly one winner.
+
+    You must:
+    - Evaluate each solver independently
+    - Compare ONLY the refined solutions
+    - Select exactly one winner based on refined solution quality
+  </task_definition>
+
+  <schema_overview>
+    The ROOT and AUTHORITATIVE input schema for this task is:
+    <root_schema>FinalJudgementInput</root_schema>
+
+    FinalJudgementInput may reference other schemas by type name.
+    All referenced schemas are defined below.
+  </schema_overview>
+
+  <schema_definitions>
+    <Problem>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(Problem)}
+    </Problem>
+
+    <ProblemSolution>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(ProblemSolution)}
+    </ProblemSolution>
+
+    <ProblemSolutionReview>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(ProblemSolutionReview)}
+    </ProblemSolutionReview>
+
+    <RefinedProblemSolution>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(RefinedProblemSolution)}
+    </RefinedProblemSolution>
+
+    <SolverContexts>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(SolverContexts)}
+    </SolverContexts>
+
+    <FinalJudgementInput>
+      {PydanticSchemaUtils.to_descriptive_pretty_json(FinalJudgementInput)}
+    </FinalJudgementInput>
+  </schema_definitions>
+
+  <input_contract>
+    The user prompt will provide a single JSON object
+    that MUST conform to the FinalJudgementInput schema.
+
+    Interpretation rules:
+    - FinalJudgementInput is the ONLY root-level input object
+    - Each SolverContexts entry represents one solver evaluated independently
+    - Referenced schemas define structure and meaning only;
+      they do NOT represent separate inputs
+
+    You must:
+    - Rely ONLY on the contents of the provided JSON input
+    - Interpret all fields using their referenced schema definitions
+    - Treat all solver contexts as independent and complete
+    - Do NOT introduce new facts, assumptions, or reasoning
+  </input_contract>
+
+  <evaluation_procedure>
+    For EACH solver context:
+    1. Assess the correctness of the original solution
+    2. Examine peer reviews and identify valid vs invalid critiques
+    3. Evaluate how well the refined solution addressed valid critiques
+
+    After evaluating all solver contexts:
+    4. Judge the final quality of EACH refined solution independently
+    5. Compare ONLY the refined solutions
+    6. Select EXACTLY ONE winner
+  </evaluation_procedure>
+
+  <decision_rules>
+    - The winner MUST be chosen from the refined solutions
+    - Prefer correctness and logical soundness over style or verbosity
+    - If multiple refined solutions are correct, select the one with the most
+      rigorous, complete, and well-justified reasoning
+    - Do NOT merge ideas from multiple solvers
+    - Do NOT invent new arguments
+    - Base all judgments STRICTLY on the provided data
+  </decision_rules>
+
+  <output_contract>
+    The output schema is enforced externally via a Pydantic JSON schema.
+
+    You must:
+    - Output a single valid JSON object
+    - Conform exactly to the enforced output schema
+    - Do NOT add, rename, or remove fields
+    - Do NOT include markdown, comments, or extra text
+  </output_contract>
+
+  <global_rules>
+    - You are strictly evaluative; do NOT solve or refine the problem
+    - Do NOT revise or combine solver solutions
+    - Select exactly ONE winner
+    - The judgment MUST be fully justified by the provided solver contexts
+  </global_rules>
+</system>
+""".strip()
+
+
+def build_final_judgement_user_prompt(
+    *,
+    final_input: FinalJudgementInput,
+) -> str:
+    final_input_json = final_input.model_dump(mode="json")
+
+    return f"""
+<user_input>
+  The following JSON object is the authoritative input for this task.
+  It conforms to the FinalJudgementInput schema.
+
+  You must rely ONLY on this JSON to perform the judgment.
+
+  <FinalJudgementInput>
+  {json.dumps(final_input_json, indent=2, ensure_ascii=False)}
+  </FinalJudgementInput>
+</user_input>
+""".strip()
