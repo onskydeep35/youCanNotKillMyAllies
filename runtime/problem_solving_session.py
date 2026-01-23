@@ -154,7 +154,13 @@ class ProblemSolvingSession:
             raise RuntimeError("At least 4 agents required (3 solvers + 1 judge)")
 
         def judge_preference(a: RoleAssessment) -> float:
-            return a.judge_score - a.solver_score
+            """
+            Weight judge preference by confidence.
+            Strong preferences (0.9 vs 0.1) beat weak ones (0.51 vs 0.49)
+            """
+            score_diff = a.judge_score - a.solver_score
+            confidence = abs(score_diff)
+            return score_diff * (1 + confidence)
 
         results.sort(key=judge_preference, reverse=True)
 

@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-
+from config import *
 from runtime.app import ProblemSolvingApp
 from schemas.dataclass.agent_config import LLMAgentConfig
 from llm.prompts.prompts import *
@@ -49,19 +49,17 @@ def create_llm_configs():
 
 
 async def main():
-    print(build_solver_system_prompt(category="cat"))
-
     app = ProblemSolvingApp(
-        problems_path=Path("data/datasets/problems.json"),
+        problems_path=Path(PROBLEMS_PATH),
         agent_configs=create_llm_configs(),
-        problems_skip=6,
-        problems_take=1,
-        output_dir=Path("data/output"),
+        problems_skip=PROBLEMS_SKIP,
+        problems_take=PROBLEMS_TAKE,
+        output_dir=Path(DEFAULT_OUTPUT_DIR),
     )
 
     await app.run(
-        timeout_sec=2000,
-        log_interval_sec=10,
+        timeout_sec=DEFAULT_TIMEOUT_SEC,
+        log_interval_sec=LOG_INTERVAL_SEC,
     )
 
 
