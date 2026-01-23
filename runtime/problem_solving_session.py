@@ -331,8 +331,6 @@ class ProblemSolvingSession:
 
                 document = PydanticSchemaUtils.build_full_document(refined_solution)
 
-                print("[REFINED SOLUTION DOCUMENT]", document)
-
                 await self.writer.write(
                     collection=REFINED_SOLUTIONS,
                     document=document,
@@ -396,5 +394,4 @@ class ProblemSolvingSession:
 
         print("[FINAL JUDGMENT COMPLETE]")
         print("WINNER:", judgement.winner_solver)
-        print("FINAL ANSWER:")
-        print(winner_ctx.refined_solution.refined_answer)
+        print("FINAL ANSWER:", winner_ctx.refined_solution.refined_answer)
