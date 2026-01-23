@@ -12,7 +12,7 @@ MAX_CONCURRENCY = 4
 
 # Problem Selection (for testing)
 PROBLEMS_SKIP = 0
-PROBLEMS_TAKE = None  # None = all problems
+PROBLEMS_TAKE = 1
 
 # Output Paths
 DEFAULT_OUTPUT_DIR = "data/output"
