@@ -56,6 +56,8 @@ class FinalJudgement(BaseModel):
         description="The most accurate and the best solution author amongst given solver agent contexts for the problem"
     )
 
+    answer: str = Field(..., description="Final answer to the problem based on judgement")
+
     confidence: float = Field(
         ...,
         ge=0.0,
